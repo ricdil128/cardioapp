@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulatore ECG Realistico</title>
+  <!-- Collegamento al Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <style>
+    /* Stili generali */
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .container {
+      background: rgba(0, 0, 0, 0.75);
+      padding: 20px 30px;
+      border-radius: 8px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.5);
+      text-align: center;
+      max-width: 900px;
+      width: 100%;
+      color: #000;
+    }
+    h1, h2, h3 {
+      margin-bottom: 20px;
+    }
+    /* Canvas dell'ECG */
+    #ecgCanvas {
+      display: block;
+      margin: 0 auto 20px auto;
+      border: 2px solid #333;
+      border-radius: 4px;
+    }
+    /* Pannello diagnostico */
+    #diagnosticPanel {
+      margin-bottom: 20px;
+      text-align: left;
+      background: rgba(255,255,255,0.9);
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+      color: #000;
+    }
+    #diagnosticPanel p {
+      margin: 5px 0;
+    }
+    /* Bottone principale */
+    #startTest {
+      padding: 10px 20px;
+      font-size: 1.1rem;
+      background: #0f0;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #000;
+      transition: background 0.3s;
+    }
+    #startTest:hover {
+      background: #afff80;
+    }
+    /* Sezione Domanda e Risposte */
+    #questionContainer {
+      margin-top: 20px;
+      background: rgba(255,255,255,0.9);
+      padding: 15px;
+      border-radius: 5px;
+      display: none;
+      color: #000;
+    }
+    #answers {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+    .answer {
+      padding: 10px 15px;
+      background: #fff;
+      color: #000;
+      border: 2px solid #000;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .answer:hover {
+      background: #ddd;
+    }
+    #feedback {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Simulatore ECG Realistico</h1>
+    <canvas id="ecgCanvas" width="800" height="300"></canvas>
+    
+    <!-- Pannello diagnostico -->
+    <div id="diagnosticPanel">
+      <h3>Dati Diagnostici</h3>
+      <p id="heartRate">Frequenza Cardiaca:</p>
+      <p id="qrsAmplitude">Ampiezza QRS:</p>
+      <p id="pWaveAmplitude">Ampiezza P Wave:</p>
+      <p id="tWaveAmplitude">Ampiezza T Wave:</p>
+      <p id="bloodPressure">Pressione Arteriosa:</p>
+      <p id="spo2">SpO₂:</p>
+    </div>
+
+    <button id="startTest">Avvia Test</button>
+    
+    <!-- Sezione Domanda e Risposte -->
+    <div id="questionContainer">
+      <h2>Quale problema cardiaco rappresenta questo ECG?</h2>
+      <div id="answers">
+        <button class="answer"></button>
+        <button class="answer"></button>
+        <button class="answer"></button>
+        <button class="answer"></button>
+      </div>
+      <div id="feedback"></div>
+    </div>
+  </div>
+
+  <script>
+    // Funzione per disegnare il reticolo tipico dell'ECG (carta con griglia)
+    function drawGrid(ctx, width, height) {
+      ctx.fillStyle = "#fdfdfd"; // Colore carta
+      ctx.fillRect(0, 0, width, height);
+      
+      // Disegna le linee: ogni 10px linea sottile, ogni 50px linea più marcata
+      for (let x = 0; x < width; x += 10) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        if (x % 50 === 0) {
+          ctx.strokeStyle = "rgba(255, 0, 0, 0.3)";
+          ctx.lineWidth = 1.2;
+        } else {
+          ctx.strokeStyle = "rgba(255, 0, 0, 0.1)";
+          ctx.lineWidth = 0.5;
+        }
+        ctx.stroke();
+      }
+      for (let y = 0; y < height; y += 10) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        if (y % 50 === 0) {
+          ctx.strokeStyle = "rgba(255, 0, 0, 0.3)";
+          ctx.lineWidth = 1.2;
+        } else {
+          ctx.strokeStyle = "rgba(255, 0, 0, 0.1)";
+          ctx.lineWidth = 0.5;
+        }
+        ctx.stroke();
+      }
+    }
+
+    // Funzione che simula un battito ECG "reale" per il ritmo sinusale normale
+    function ecgWaveform(time) {
+      const period = 1.0; // durata del battito (60 bpm)
+      const t = time % period;
+      if (t >= 0.05 && t < 0.12) {
+        let phase = (t - 0.05) / 0.07;
+        return 0.15 * Math.sin(Math.PI * phase);
+      } else if (t >= 0.12 && t < 0.13) {
+        let phase = (t - 0.12) / 0.01;
+        return -0.2 * phase;
+      } else if (t >= 0.13 && t < 0.14) {
+        let phase = (t - 0.13) / 0.01;
+        return -0.2 + (1.2 * phase);
+      } else if (t >= 0.14 && t < 0.16) {
+        let phase = (t - 0.14) / 0.02;
+        return 1.0 - (1.3 * phase);
+      } else if (t >= 0.3 && t < 0.45) {
+        let phase = (t - 0.3) / 0.15;
+        return 0.25 * Math.sin(Math.PI * phase);
+      } else {
+        return 0;
+      }
+    }
+
+    // Definizione delle condizioni cardiache con waveform e dati diagnostici
+    const heartConditions = [
+      {
+        name: "Ritmo sinusale normale",
+        description: "ECG realistico con ritmo regolare.",
+        waveform: function(time) {
+          return ecgWaveform(time);
+        },
+        answers: [
+          "Ritmo sinusale normale",
+          "Fibrillazione atriale",
+          "Extrasistole ventricolare",
+          "Blocco di branca"
+        ],
+        correct: "Ritmo sinusale normale",
+        diagnosticData: {
+          heartRate: "70 bpm",
+          qrsAmplitude: "1.0 mV",
+          pWaveAmplitude: "0.15 mV",
+          tWaveAmplitude: "0.25 mV",
+          bloodPressure: "120/80 mmHg",
+          spo2: "98%"
+        }
+      },
+      {
+        name: "Fibrillazione atriale",
+        description: "ECG con ritmo irregolare e assenza di onde P definite.",
+        waveform: function(time) {
+          const period = 1.0;
+          const t = time % period;
+          if (t >= 0.13 && t < 0.14) {
+            let phase = (t - 0.13) / 0.01;
+            return -0.2 + (1.0 * phase);
+          } else if (t >= 0.14 && t < 0.16) {
+            let phase = (t - 0.14) / 0.02;
+            return 1.0 - (1.3 * phase);
+          } else {
+            return (Math.random() - 0.5) * 0.1;
+          }
+        },
+        answers: [
+          "Ritmo sinusale normale",
+          "Fibrillazione atriale",
+          "Extrasistole ventricolare",
+          "Infarto del miocardio"
+        ],
+        correct: "Fibrillazione atriale",
+        diagnosticData: {
+          heartRate: "90 bpm (irregolare)",
+          qrsAmplitude: "1.0 mV",
+          pWaveAmplitude: "Assente",
+          tWaveAmplitude: "0.25 mV",
+          bloodPressure: "110/70 mmHg",
+          spo2: "97%"
+        }
+      },
+      {
+        name: "Extrasistole ventricolare",
+        description: "ECG con battito prematuro anomalo.",
+        waveform: function(time) {
+          const period = 1.0;
+          const beatIndex = Math.floor(time / period);
+          const t = time % period;
+          if (beatIndex % 5 === 0 && t < 0.2) {
+            if (t >= 0.05 && t < 0.12) {
+              let phase = (t - 0.05) / 0.07;
+              return 0.1 * Math.sin(Math.PI * phase);
+            } else if (t >= 0.12 && t < 0.13) {
+              let phase = (t - 0.12) / 0.01;
+              return -0.15 * phase;
+            } else if (t >= 0.13 && t < 0.14) {
+              let phase = (t - 0.13) / 0.01;
+              return -0.15 + (0.8 * phase);
+            } else if (t >= 0.14 && t < 0.16) {
+              let phase = (t - 0.14) / 0.02;
+              return 0.8 - (1.0 * phase);
+            } else {
+              return 0;
+            }
+          } else {
+            return ecgWaveform(time);
+          }
+        },
+        answers: [
+          "Ritmo sinusale normale",
+          "Fibrillazione atriale",
+          "Extrasistole ventricolare",
+          "Tachicardia ventricolare"
+        ],
+        correct: "Extrasistole ventricolare",
+        diagnosticData: {
+          heartRate: "65 bpm (con extrasistoli)",
+          qrsAmplitude: "0.8-1.0 mV (variabile)",
+          pWaveAmplitude: "0.1 mV",
+          tWaveAmplitude: "0.25 mV",
+          bloodPressure: "115/75 mmHg",
+          spo2: "98%"
+        }
+      }
+    ];
+
+    // Variabili per la simulazione e il canvas
+    let currentCondition;
+    let startTime;
+    let animationId;
+    const canvas = document.getElementById("ecgCanvas");
+    const ctx = canvas.getContext("2d");
+    let xPos = 0;
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    const midY = canvasHeight / 2;
+    const speed = 2;
+    let ecgData = [];
+
+    // Avvia la simulazione: resetta il tracciato e imposta la condizione
+    function startECGSimulation(condition) {
+      currentCondition = condition;
+      startTime = Date.now() / 1000;
+      xPos = 0;
+      ecgData = [];
+      if (animationId) cancelAnimationFrame(animationId);
+      animateECG();
+    }
+
+    // Animazione: ad ogni frame disegna il reticolo e il tracciato ECG
+    function animateECG() {
+      const now = Date.now() / 1000;
+      const elapsed = now - startTime;
+      const value = currentCondition.waveform(elapsed);
+      const y = midY - value * (canvasHeight / 3);
+      ecgData.push({ x: xPos, y: y });
+      
+      // Ridisegna il reticolo e il tracciato
+      drawGrid(ctx, canvasWidth, canvasHeight);
+      
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < ecgData.length; i++) {
+        const point = ecgData[i];
+        if (i === 0) {
+          ctx.moveTo(point.x, point.y);
+        } else {
+          ctx.lineTo(point.x, point.y);
+        }
+      }
+      ctx.stroke();
+
+      xPos += speed;
+      if (xPos > canvasWidth) {
+        ecgData.shift();
+      }
+      
+      animationId = requestAnimationFrame(animateECG);
+    }
+
+    // Configurazione del test e aggiornamento dei dati diagnostici
+    document.getElementById("startTest").addEventListener("click", function() {
+      const randomIndex = Math.floor(Math.random() * heartConditions.length);
+      const condition = heartConditions[randomIndex];
+      startECGSimulation(condition);
+      const diagnosticPanel = document.getElementById("diagnosticPanel");
+      diagnosticPanel.style.display = "block";
+      document.getElementById("heartRate").textContent = "Frequenza Cardiaca: " + condition.diagnosticData.heartRate;
+      document.getElementById("qrsAmplitude").textContent = "Ampiezza QRS: " + condition.diagnosticData.qrsAmplitude;
+      document.getElementById("pWaveAmplitude").textContent = "Ampiezza P Wave: " + condition.diagnosticData.pWaveAmplitude;
+      document.getElementById("tWaveAmplitude").textContent = "Ampiezza T Wave: " + condition.diagnosticData.tWaveAmplitude;
+      document.getElementById("bloodPressure").textContent = "Pressione Arteriosa: " + condition.diagnosticData.bloodPressure;
+      document.getElementById("spo2").textContent = "SpO₂: " + condition.diagnosticData.spo2;
+      
+      document.getElementById("questionContainer").style.display = "block";
+      const answerButtons = document.querySelectorAll(".answer");
+      let answers = condition.answers.slice();
+      for (let i = answers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [answers[i], answers[j]] = [answers[j], answers[i]];
+      }
+      answerButtons.forEach(function(btn, index) {
+        btn.textContent = answers[index];
+        btn.onclick = function() {
+          const feedback = document.getElementById("feedback");
+          if (answers[index] === condition.correct) {
+            feedback.textContent = "Risposta corretta!";
+            feedback.style.color = "lime";
+          } else {
+            feedback.textContent = "Risposta errata. La risposta corretta è: " + condition.correct;
+            feedback.style.color = "red";
+          }
+        };
+      });
+      document.getElementById("feedback").textContent = "";
+    });
+
+    // Registrazione del Service Worker
+    if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./sw.js')
+      .then(function(registration) {
+        console.log("Service Worker registrato con successo:", registration);
+      })
+      .catch(function(error) {
+        console.log("Registrazione Service Worker fallita:", error);
+         });
+      });
+     }
+
+  </script>
+</body>
+</html>
