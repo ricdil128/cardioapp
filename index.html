@@ -15,7 +15,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      height: 100vh;
+      min-height: 100vh;
     }
     .container {
       background: rgba(0, 0, 0, 0.75);
@@ -24,7 +24,7 @@
       box-shadow: 0 0 15px rgba(0,0,0,0.5);
       text-align: center;
       max-width: 900px;
-      width: 100%;
+      width: 90%;
       color: #000;
     }
     h1, h2, h3 {
@@ -36,6 +36,8 @@
       margin: 0 auto 20px auto;
       border: 2px solid #333;
       border-radius: 4px;
+      width: 100%;
+      height: auto;
     }
     /* Pannello diagnostico */
     #diagnosticPanel {
@@ -95,12 +97,26 @@
       margin-top: 15px;
       font-weight: bold;
     }
+    /* Media Queries per dispositivi mobili */
+    @media (max-width: 600px) {
+      .container {
+        padding: 15px;
+        width: 95%;
+      }
+      h1 {
+        font-size: 1.8rem;
+      }
+      #startTest {
+        font-size: 1rem;
+        padding: 8px 16px;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Simulatore ECG Realistico</h1>
-    <canvas id="ecgCanvas" width="800" height="300"></canvas>
+    <canvas id="ecgCanvas"></canvas>
     
     <!-- Pannello diagnostico -->
     <div id="diagnosticPanel">
@@ -129,43 +145,40 @@
   </div>
 
   <script>
-    // Funzione per disegnare il reticolo tipico dell'ECG (carta con griglia)
+    // Funzione per ridimensionare il canvas in base alla larghezza del container
+    function resizeCanvas() {
+      const canvas = document.getElementById("ecgCanvas");
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = 300; // Altezza fissa (puoi modificarla se necessario)
+    }
+    window.addEventListener("resize", resizeCanvas);
+    window.addEventListener("load", resizeCanvas);
+
+    // Funzione per disegnare il reticolo (griglia tipica degli ECG)
     function drawGrid(ctx, width, height) {
-      ctx.fillStyle = "#fdfdfd"; // Colore carta
+      ctx.fillStyle = "#fdfdfd";
       ctx.fillRect(0, 0, width, height);
-      
-      // Disegna le linee: ogni 10px linea sottile, ogni 50px linea più marcata
       for (let x = 0; x < width; x += 10) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, height);
-        if (x % 50 === 0) {
-          ctx.strokeStyle = "rgba(255, 0, 0, 0.3)";
-          ctx.lineWidth = 1.2;
-        } else {
-          ctx.strokeStyle = "rgba(255, 0, 0, 0.1)";
-          ctx.lineWidth = 0.5;
-        }
+        ctx.strokeStyle = (x % 50 === 0) ? "rgba(255, 0, 0, 0.3)" : "rgba(255, 0, 0, 0.1)";
+        ctx.lineWidth = (x % 50 === 0) ? 1.2 : 0.5;
         ctx.stroke();
       }
       for (let y = 0; y < height; y += 10) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
-        if (y % 50 === 0) {
-          ctx.strokeStyle = "rgba(255, 0, 0, 0.3)";
-          ctx.lineWidth = 1.2;
-        } else {
-          ctx.strokeStyle = "rgba(255, 0, 0, 0.1)";
-          ctx.lineWidth = 0.5;
-        }
+        ctx.strokeStyle = (y % 50 === 0) ? "rgba(255, 0, 0, 0.3)" : "rgba(255, 0, 0, 0.1)";
+        ctx.lineWidth = (y % 50 === 0) ? 1.2 : 0.5;
         ctx.stroke();
       }
     }
 
-    // Funzione che simula un battito ECG "reale" per il ritmo sinusale normale
+    // Funzione che simula il tracciato ECG per un battito sinusale
     function ecgWaveform(time) {
-      const period = 1.0; // durata del battito (60 bpm)
+      const period = 1.0;
       const t = time % period;
       if (t >= 0.05 && t < 0.12) {
         let phase = (t - 0.05) / 0.07;
@@ -187,14 +200,12 @@
       }
     }
 
-    // Definizione delle condizioni cardiache con waveform e dati diagnostici
+    // Condizioni cardiache con dati diagnostici
     const heartConditions = [
       {
         name: "Ritmo sinusale normale",
         description: "ECG realistico con ritmo regolare.",
-        waveform: function(time) {
-          return ecgWaveform(time);
-        },
+        waveform: function(time) { return ecgWaveform(time); },
         answers: [
           "Ritmo sinusale normale",
           "Fibrillazione atriale",
@@ -288,20 +299,16 @@
       }
     ];
 
-    // Variabili per la simulazione e il canvas
+    // Variabili per la simulazione
     let currentCondition;
     let startTime;
     let animationId;
     const canvas = document.getElementById("ecgCanvas");
     const ctx = canvas.getContext("2d");
     let xPos = 0;
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    const midY = canvasHeight / 2;
-    const speed = 2;
     let ecgData = [];
 
-    // Avvia la simulazione: resetta il tracciato e imposta la condizione
+    // Funzione per avviare la simulazione
     function startECGSimulation(condition) {
       currentCondition = condition;
       startTime = Date.now() / 1000;
@@ -311,16 +318,15 @@
       animateECG();
     }
 
-    // Animazione: ad ogni frame disegna il reticolo e il tracciato ECG
+    // Funzione di animazione: disegna il reticolo e il tracciato ECG
     function animateECG() {
       const now = Date.now() / 1000;
       const elapsed = now - startTime;
       const value = currentCondition.waveform(elapsed);
-      const y = midY - value * (canvasHeight / 3);
+      const y = canvas.height / 2 - value * (canvas.height / 3);
       ecgData.push({ x: xPos, y: y });
       
-      // Ridisegna il reticolo e il tracciato
-      drawGrid(ctx, canvasWidth, canvasHeight);
+      drawGrid(ctx, canvas.width, canvas.height);
       
       ctx.strokeStyle = "#000";
       ctx.lineWidth = 2;
@@ -334,12 +340,10 @@
         }
       }
       ctx.stroke();
-
-      xPos += speed;
-      if (xPos > canvasWidth) {
+      xPos += 2;
+      if (xPos > canvas.width) {
         ecgData.shift();
       }
-      
       animationId = requestAnimationFrame(animateECG);
     }
 
@@ -348,8 +352,7 @@
       const randomIndex = Math.floor(Math.random() * heartConditions.length);
       const condition = heartConditions[randomIndex];
       startECGSimulation(condition);
-      const diagnosticPanel = document.getElementById("diagnosticPanel");
-      diagnosticPanel.style.display = "block";
+      document.getElementById("diagnosticPanel").style.display = "block";
       document.getElementById("heartRate").textContent = "Frequenza Cardiaca: " + condition.diagnosticData.heartRate;
       document.getElementById("qrsAmplitude").textContent = "Ampiezza QRS: " + condition.diagnosticData.qrsAmplitude;
       document.getElementById("pWaveAmplitude").textContent = "Ampiezza P Wave: " + condition.diagnosticData.pWaveAmplitude;
@@ -382,17 +385,16 @@
 
     // Registrazione del Service Worker
     if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('./sw.js')
-      .then(function(registration) {
-        console.log("Service Worker registrato con successo:", registration);
-      })
-      .catch(function(error) {
-        console.log("Registrazione Service Worker fallita:", error);
-         });
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js')
+          .then(function(registration) {
+            console.log("Service Worker registrato con successo:", registration);
+          })
+          .catch(function(error) {
+            console.log("Registrazione Service Worker fallita:", error);
+          });
       });
-     }
-
+    }
   </script>
 </body>
 </html>
